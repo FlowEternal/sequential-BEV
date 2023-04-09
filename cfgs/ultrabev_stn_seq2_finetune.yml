@@ -1,0 +1,179 @@
+tag: "ultrabev_stn_seq1"
+
+
+#---------------------------------------------------#
+#  training config
+#---------------------------------------------------#
+train:
+    batch_size_train: 24
+    num_worker_train: 24
+    batch_size_valid: 12
+    num_worker_valid: 12
+    lr: 0.00002
+    weight_decay: 0.000001
+    epoch: 12
+    logs: "logs"
+    print_interval: 10
+    use_distribute: True
+    continue_train: True
+    weight_file: "/home/zhandongxu/Code/SeqBEV/logs/stn_seq2_pretrain/model/epoch_39.pth"
+
+    tuning_single_header: False
+    tuning_interval: 2
+
+
+#---------------------------------------------------#
+#  dataloader config
+#---------------------------------------------------#
+dataloader:
+    #  input images config
+    data_list: "/data/zdx/Data/data_nuscene"
+    network_input_width: 640
+    network_input_height: 480
+
+    #  cameras config
+    cam_num: 6
+    camera_list: ["CAM_FRONT","CAM_FRONT_LEFT","CAM_FRONT_RIGHT","CAM_BACK","CAM_BACK_LEFT","CAM_BACK_RIGHT"]
+
+    # sequence num
+    seq_num: 2 # extremely important parameter
+
+    #  bird eyes view config
+    x_bound: [-32.0, 32.0, 0.125]  # Forward/Backward Bound
+    y_bound: [-16.0, 16.0, 0.125]  # Left/Right Bound
+
+    # data augmentation
+    with_aug: False
+    GaussianBlur: [0.5, 1.5]
+    LinearContrast: [0.8, 1.2]
+    Multiply: [0.8, 1.2]
+    AdditiveGaussianNoise: 0.1
+    WithColorspace_Multiply_1: [0.7, 1.3]
+    WithColorspace_Multiply_2: [0.1, 2.0]
+    WithColorspace_Multiply_3: [0.5, 1.5]
+    TranslateX: [-8, 8]
+    TranslateY: [-8, 8]
+    ShearX: [-4, 4]
+    ShearY: [-4, 4]
+    Rotate: [-4, 4]
+    Crop: 0.05
+    aug_probability: 0.6
+
+
+#---------------------------------------------------#
+#  network backbone config
+#---------------------------------------------------#
+backbone:
+    # feature extract
+    resnet_type: 34
+    dim_array: [64, 128, 128, 256]
+
+    # spatial transformer
+    bev_feat_ratio: 8
+    use_mask: True
+
+    # transformer encoder
+#    attn_num_layers: 6
+#    attn_num_heads: 8
+    attn_num_layers: 3
+    attn_num_heads: 4
+    attn_dropout: 0.1
+    ffn_num_fcs: 2
+    ffn_dropout: 0.1
+    ffn_feedforward_channels: 1024
+
+    # final encoding
+    channels: &channels 256
+
+    # temporal module name
+    seq_module_name: "temporal_block"
+    start_out_channels: 256
+    extra_in_channels: 0
+    inbetween_layers: 0
+    pyramid_pooling: False
+
+    # resize params
+    align_corners: False
+
+    # multiview features fusion strategies
+    # True: features => transformer encoder => transformer decoder => fused bev features
+    # False: features => spatial transformation layers => transformer encoder => fused bev features
+    use_transformer_decoder: False
+    layer_id: 3
+
+#---------------------------------------------------#
+#  Vector Header Defination
+#---------------------------------------------------#
+vector:
+    vector_scale_ratio: 4           # scale for vector loss calculation
+    use_resize_conv_os: False       # do convolution for feature fusion after resize
+
+    class_list: [ "ped_crossing",'lane', "road_edge"]
+    angle_list: [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330]
+    feat_channel: *channels
+
+    # cluster hyperparameter
+    cluster_feat_dim: 8                 # cluster feature dim
+    delta_v: &delta_v 0.5               # similarity loss
+    delta_d: 3.0                        # difference loss
+    thresh: 0.40                        # threshold for heatmap
+    threshold_instance: *delta_v        # threshold for cluster instance
+    cluster_min_num: 3                  # 少于这个数量直接过滤掉不进行聚类损失计算 重要
+
+    # cluster loss weight
+    vector_instance: 1.0
+    sisc_loss: 1.0
+    disc_loss: 1.0
+
+    # heatmap loss weight
+    vector_center_heatmap: 1.0
+    exist_condidence_loss: 1.0
+    nonexist_confidence_loss: 1.0
+
+    # offset loss weight
+    vector_offset: 1.0
+
+    # direction loss weight
+    vector_direct: 1.0
+    use_half_direct: True
+
+    # classification loss weight
+    vector_classify: 1.0
+
+    # vector total loss weight
+    vector_weight: 1.0
+
+    # connect line hyperparameter
+    class_num: 3
+    threshold_non_exist: 0.01
+    resolution: &resolution 0.125               # postprocess parameters: resolution
+    sample_distance: [1.0, 1.0, 1.0]            # postprocess parameters: radius within which the points are removed (m)
+    threshold_remove: [4.0, 4.0, 8.0]           # postprocess parameters: sample_distance * threshold_remove (m)
+
+    # validation
+    sampled_recalls_num: 10
+    thresholds: [0.2, 0.5, 1.0]
+    resolution_x: *resolution
+    resolution_y: *resolution
+    cd_threshold: 5
+    thickness: 4
+    max_instance_num: 200
+
+#---------------------------------------------------#
+#  Detection Header Defination
+#---------------------------------------------------#
+detection:
+    class_list: ['__background__', "vehicle"]
+    num_classes: 1
+    in_channel: 256
+    feat_channel: 256
+    loss_center_heatmap: { "type":'GaussianFocalLoss', "loss_weight":1.0 }
+    loss_wh: {"type":'L1Loss', "loss_weight":0.1}
+    loss_offset: {type: 'L1Loss', "loss_weight": 1.0}
+    loss_rotation: {type: 'L1Loss', "loss_weight": 0.5}
+    test_cfg: {'topk': 100, 'local_maximum_kernel': 3, 'max_per_img': 100}
+    detection_weight: 1.0
+
+
+
+
